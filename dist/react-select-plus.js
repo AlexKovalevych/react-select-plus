@@ -229,8 +229,14 @@ var Option = _react2['default'].createClass({
 		onFocus: _react2['default'].PropTypes.func, // method to handle mouseEnter on option element
 		onSelect: _react2['default'].PropTypes.func, // method to handle click on option element
 		onUnfocus: _react2['default'].PropTypes.func, // method to handle mouseLeave on option element
-		option: _react2['default'].PropTypes.object.isRequired },
-	// object that is base for that option
+		option: _react2['default'].PropTypes.object.isRequired, // object that is base for that option
+		showCheckedIcon: _react2['default'].PropTypes.bool // show/hide cheched icon (used for multuple options select)
+	},
+	getInitialState: function getInitialState() {
+		return {
+			isChecked: this.props.isSelected
+		};
+	},
 	blockEvent: function blockEvent(event) {
 		event.preventDefault();
 		event.stopPropagation();
@@ -248,6 +254,9 @@ var Option = _react2['default'].createClass({
 		event.preventDefault();
 		event.stopPropagation();
 		this.props.onSelect(this.props.option, event);
+		this.setState({
+			isChecked: !this.state.isChecked
+		});
 	},
 
 	handleMouseEnter: function handleMouseEnter(event) {
@@ -541,7 +550,8 @@ var Select = _react2['default'].createClass({
 		resetValue: _react2['default'].PropTypes.any, // value to use when you clear the control
 		scrollMenuIntoView: _react2['default'].PropTypes.bool, // boolean to enable the viewport to shift so that the full menu fully visible when engaged
 		searchable: _react2['default'].PropTypes.bool, // whether to enable searching feature or not
-		simpleValue: _react2['default'].PropTypes.bool, // pass the value to onChange as a simple value (legacy pre 1.0 mode), defaults to false
+		showAllOptions: _react2['default'].PropTypes.bool, // always show all options for multiple dropdown
+		simpleValue: _react2['default'].PropTypes.bool, // pass the value to onChange as a simple value (legacy pre 1.0 mode), defaults to false,
 		style: _react2['default'].PropTypes.object, // optional style to apply to the control
 		tabIndex: _react2['default'].PropTypes.string, // optional tab index of the control
 		tabSelectsValue: _react2['default'].PropTypes.bool, // whether to treat tabbing out while focused to be value selection
@@ -589,6 +599,7 @@ var Select = _react2['default'].createClass({
 			resetValue: null,
 			scrollMenuIntoView: true,
 			searchable: true,
+			showAllOptions: false,
 			simpleValue: false,
 			tabSelectsValue: true,
 			valueComponent: _Value2['default'],
@@ -648,7 +659,8 @@ var Select = _react2['default'].createClass({
 
 	componentDidUpdate: function componentDidUpdate(prevProps, prevState) {
 		// focus to the selected option
-		if (this.refs.menu && this.refs.focused && this.state.isOpen && !this.hasScrolledToOption) {
+		var multiScrollDisable = this.props.multi && this.props.showAllOptions;
+		if (this.refs.menu && this.refs.focused && this.state.isOpen && !this.hasScrolledToOption && !multiScrollDisable) {
 			var focusedOptionNode = _reactDom2['default'].findDOMNode(this.refs.focused);
 			var focusedOptionParent = focusedOptionNode.parentElement;
 			var menuNode = _reactDom2['default'].findDOMNode(this.refs.menu);
@@ -658,7 +670,7 @@ var Select = _react2['default'].createClass({
 			this.hasScrolledToOption = false;
 		}
 
-		if (this._scrollToFocusedOptionOnUpdate && this.refs.focused && this.refs.menu) {
+		if (this._scrollToFocusedOptionOnUpdate && this.refs.focused && this.refs.menu && !multiScrollDisable) {
 			this._scrollToFocusedOptionOnUpdate = false;
 			var focusedDOM = _reactDom2['default'].findDOMNode(this.refs.focused);
 			var menuDOM = _reactDom2['default'].findDOMNode(this.refs.menu);
@@ -668,7 +680,7 @@ var Select = _react2['default'].createClass({
 				menuDOM.scrollTop = focusedDOM.offsetTop + focusedDOM.clientHeight - menuDOM.offsetHeight;
 			}
 		}
-		if (this.props.scrollMenuIntoView && this.refs.menuContainer) {
+		if (this.props.scrollMenuIntoView && this.refs.menuContainer && !multiScrollDisable) {
 			var menuContainerRect = this.refs.menuContainer.getBoundingClientRect();
 			if (window.innerHeight < menuContainerRect.bottom + this.props.menuBuffer) {
 				window.scrollBy(0, menuContainerRect.bottom + this.props.menuBuffer - window.innerHeight);
@@ -902,7 +914,7 @@ var Select = _react2['default'].createClass({
 	},
 
 	handleMenuScroll: function handleMenuScroll(event) {
-		if (!this.props.onMenuScrollToBottom) return;
+		if (!this.props.onMenuScrollToBottom || this.props.multi && this.props.showAllOptions) return;
 		var target = event.target;
 
 		if (target.scrollHeight > target.offsetHeight && !(target.scrollHeight - target.offsetHeight - target.scrollTop)) {
@@ -979,7 +991,16 @@ var Select = _react2['default'].createClass({
 	selectValue: function selectValue(value) {
 		this.hasScrolledToOption = false;
 		if (this.props.multi) {
-			this.addValue(value);
+			if (this.props.showAllOptions) {
+				var values = this.getValueArray(this.props.value);
+				if (values.indexOf(value) > -1) {
+					this.removeValue(value);
+				} else {
+					this.addValue(value);
+				}
+			} else {
+				this.addValue(value);
+			}
 			this.setState({
 				inputValue: ''
 			});
@@ -1334,7 +1355,8 @@ var Select = _react2['default'].createClass({
 										onFocus: _this4.focusOption,
 										option: option,
 										isSelected: isSelected,
-										ref: optionRef
+										ref: optionRef,
+										showCheckedIcon: _this4.props.multi && _this4.props.showAllOptions
 									},
 									renderLabel(option)
 								);
@@ -1418,7 +1440,12 @@ var Select = _react2['default'].createClass({
 
 	render: function render() {
 		var valueArray = this.getValueArray(this.props.value);
-		var options = this.filterOptions(this.props.options || [], this.props.multi ? valueArray : null);
+		var excludeOptions = this.props.multi ? valueArray : null;
+		if (this.props.multi && this.props.showAllOptions) {
+			excludeOptions = null;
+		}
+
+		var options = this.filterOptions(this.props.options || [], excludeOptions);
 		this._visibleOptions = this.flattenOptions(options);
 		var isOpen = typeof this.props.isOpen === 'boolean' ? this.props.isOpen : this.state.isOpen;
 		if (this.props.multi && !options.length && valueArray.length && !this.state.inputValue) isOpen = false;
@@ -1434,6 +1461,11 @@ var Select = _react2['default'].createClass({
 			'is-searchable': this.props.searchable,
 			'has-value': valueArray.length
 		});
+
+		var outerValueArray = !this.props.multi ? valueArray : null;
+		if (this.props.multi && this.props.showAllOptions) {
+			outerValueArray = valueArray;
+		}
 
 		return _react2['default'].createElement(
 			'div',
@@ -1455,7 +1487,7 @@ var Select = _react2['default'].createClass({
 				this.renderClear(),
 				this.renderArrow()
 			),
-			isOpen ? this.renderOuter(options, !this.props.multi ? valueArray : null, focusedOption) : null
+			isOpen ? this.renderOuter(options, outerValueArray, focusedOption) : null
 		);
 	}
 
